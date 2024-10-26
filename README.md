@@ -8,9 +8,9 @@ The **WES-Variant-Calling** workflow is designed to process human Whole Exome Se
 
 Before running the WES-Variant-Calling pipeline, ensure you have the following:
 
-1. **Reference Files (downloaded during execution):**
-   - **Human Reference Genome:** GRCh38 (`GCA_000001405.15_GRCh38_no_alt_analysis_set.fna`)
-   - **dbSNP VCF:** `Homo_sapiens_assembly38.dbsnp138.vcf`
+1. **Reference Files :**
+   - **Human Reference Genome (downloaded during execution):** GRCh38 (`GCA_000001405.15_GRCh38_no_alt_analysis_set.fna`)
+   - **dbSNP VCF (downloaded during execution):** `Homo_sapiens_assembly38.dbsnp138.vcf`
    - **Sample Metadata TSV:** Contains URLs for FASTQ files and sample information
 
 2. **Software Dependencies:**
