@@ -44,13 +44,13 @@ Ensure that the `wes_pipeline.sh` script has the correct paths and configuration
 Execute the pipeline script:
 
 ```bash
-bash scripts/wes_pipeline.sh
+bash ./wes_pipeline.sh
 ```
 
 **Note:** Ensure that the script has execute permissions. If not, set them using:
 
 ```bash
-chmod +x scripts/wes_pipeline.sh
+chmod +x ./wes_pipeline.sh
 ```
 
 ## Pipeline Steps
