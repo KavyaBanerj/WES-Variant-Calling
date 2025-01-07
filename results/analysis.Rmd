@@ -1,0 +1,228 @@
+---
+title: "analysis"
+author: "Kavya Banerjee"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+The objective of this project was to analyze the Whole Exome Sequence (WES) of an individual, with an aim to identify and study a rare non-synonymous variant.
+
+## Sample Info
+
+-   Sex: female
+-   Populations: Han Chinese South, East Asian Ancestry
+-   Biosample ID: SAME123334
+-   Cell line source: HG00479 at Coriell
+
+## Annotation
+
+Analysis was performed using the following parameter settings:
+
+-   Reference Genome: hg38\
+-   Gene Definition: RefSeq Gene\
+-   Analysis Type: Individual
+
+The initial list of annotated variants, obtained through the wANNOVAR tool, consisted of 15,808 variants. This list was first filtered to retain only those variants with an exonic function classified as “nonsynonymous SNV,” reducing the number of variants to 7206. The variants were then filtered for a gnomAD allele frequency \< 0.01, narrowing the list down to 582 variants. These were further filtered to retain only those with a ClinVar significance of “Pathogenic/Likely Pathogenic,” resulting in 2 variants.
+
+```{r}
+library(readr)
+library(here)
+library(DT)
+library(tidyverse)
+
+setwd(here::here("results"))
+
+query_output_exome_summary <- read_csv("query_output_exome_summary_annovar.csv", show_col_types = FALSE) %>%
+  rename_with(~ gsub("\\.", "_", tolower(.x)))
+```
+
+```{r}
+total_variants <- nrow(query_output_exome_summary)
+cat("Total variants:", total_variants, "\n")
+```
+
+```{r}
+# Filter by exonic function = "nonsynonymous SNV"
+nonsynonymous <- query_output_exome_summary %>%
+  filter(exonicfunc_refgenewithver == "nonsynonymous SNV")
+
+cat("Variants after filtering by 'nonsynonymous SNV':", nrow(nonsynonymous), "\n")
+```
+
+```{r}
+# Keep variants affecting protein-coding regions or splice sites
+nonsynonymous_exonic <- nonsynonymous  %>%
+  filter(func_refgenewithver %in% c("exonic", "splicing", "exonic;splicing"))
+
+# This won't chane as the analysis on done on WES-analysis. 
+cat("Variants after filtering by functional category (protein-coding/splice sites):", nrow(nonsynonymous_exonic), "\n")
+```
+
+```{r}
+# nonsynonymous rare for  gnomAD frequencies < 0.01 for all subpopulations
+rare_nonsynonymous <- nonsynonymous %>%
+  filter(is.na(gnomad41_exome_af) | gnomad41_exome_af < 0.01)
+
+cat("Variants after filtering by gnomAD frequencies < 0.01 considered rare:", nrow(rare_nonsynonymous), "\n")
+```
+
+```{r}
+# ClinVar significance = "Pathogenic" or "Likely Pathogenic"
+
+nonsynonymous_pathogenic_clinvar <- nonsynonymous %>%
+  filter(clnsig %in% c("Pathogenic/Likely Pathogenic", "Pathogenic", "Likely Pathogenic"))
+
+cat("Variants after filtering by ClinVar significance ('Pathogenic'/'Likely Pathogenic'):", nrow(nonsynonymous_pathogenic_clinvar), "\n") 
+
+rare_nonsynonymous_pathogenic_clinvar <- rare_nonsynonymous %>%
+  filter(clnsig %in% c("Pathogenic/Likely Pathogenic", "Pathogenic", "Likely Pathogenic"))
+
+cat("Rare variants after filtering by ClinVar significance ('Pathogenic'/'Likely Pathogenic'):", nrow(rare_nonsynonymous_pathogenic_clinvar ), "\n")
+
+
+```
+
+```{r}
+#  Variant selection based on  in-silico pathogenicity prediction
+rare_nonsynonymous_pathogenic_potential <- nonsynonymous %>%
+  filter(cadd_phred > 20 | polyphen2_hdiv_pred %in% c("D", "P") |  sift_pred == "D" | revel_score > 0.5 | metasvm_pred == "D")
+
+cat("Variants considered pathogenic based on in-silico predictions :", nrow(rare_nonsynonymous_pathogenic_potential), "\n")
+
+rare_nonsynonymous_pathogenic_potential <- rare_nonsynonymous %>%
+  filter(cadd_phred > 20 | polyphen2_hdiv_pred %in% c("D", "P") |  sift_pred == "D" | revel_score > 0.5 | metasvm_pred == "D")
+
+cat("Rare variants considered pathogenic based on in-silico predictions :", nrow(rare_nonsynonymous_pathogenic_potential), "\n")
+```
+
+```{r}
+#  Variant selection based on in-silico pathogenicity prediction & ClinVar
+
+nonsynonymous_pathogenic_potential <- nonsynonymous_pathogenic_clinvar %>%
+  filter(cadd_phred > 20 | polyphen2_hdiv_pred %in% c("D", "P") |  sift_pred == "D" | revel_score > 0.5 | metasvm_pred == "D")
+
+cat("Variants considered pathogenic based on in-silico predictions & ClinVar :", nrow(rare_nonsynonymous_pathogenic_potential), "\n")
+
+rare_nonsynonymous_pathogenic_potential <- rare_nonsynonymous_pathogenic_clinvar %>%
+  filter(cadd_phred > 20 | polyphen2_hdiv_pred %in% c("D", "P") |  sift_pred == "D" | revel_score > 0.5 | metasvm_pred == "D")
+
+cat("Rare variants considered pathogenic based on in-silico predictions & ClinVar :", nrow(rare_nonsynonymous_pathogenic_potential), "\n")
+```
+
+## Rare non-synonymous variant pathogenictiy analysis
+
+Filtering the
+
+```{r}
+rare_pathogenic_variant <- query_output_exome_summary %>%
+  # Rare variant filter: keep variants with gnomAD allele frequency < 0.01 (<1%)
+  filter(gnomad41_exome_af < 0.01 | is.na(gnomad41_exome_af)) %>%
+  # Clinical significance filter: keep only variants in ClinVar to be (likely) disease-causing
+  filter(clnsig %in% c("Pathogenic/Likely Pathogenic", "Pathogenic", "Likely Pathogenic")) %>%
+  # Functional category filter: variants affecting protein-coding region or splice sites
+  filter(func_refgenewithver %in% c("exonic", "splicing", "exonic;splicing")) %>%
+  # Exonic function filter: keep high-impact coding changes
+  filter(exonicfunc_refgenewithver %in% c(
+    "nonsynonymous SNV",
+    "frameshift insertion",
+    "frameshift deletion",
+    "stopgain",
+    "stoploss"
+  )) %>%
+  # In silico pathogenicity predictions: at least 1 criteria to fulfil
+  # check here: https://pmc.ncbi.nlm.nih.gov/articles/PMC9774026/ 
+  filter(
+    sift_pred == "D" | #  D = Deleterious
+    polyphen2_hdiv_pred %in% c("D", "P") |  #  Probably Damaging, P = Possibly Damaging
+    cadd_phred > 20 | # common threshold
+    revel_score > 0.5 | # common threshold
+    metasvm_pred == "D" #  D = Deleterious
+    ) %>%
+  # Conservation score filter: at least 1 criteria to fulfil
+  filter(`gerp++_rs` > 2 | phylop17way_primate > 0.5)
+
+
+data <- rare_pathogenic_variant %>% 
+  select(
+    Gene = gene_refgenewithver,
+    Variant_ID = otherinfo6,
+    Exonic_Function = exonicfunc_refgenewithver,
+    DNA_Start = start,
+    DNA_Stop = end,
+    Ref = ref,
+    Alt = alt,
+    AA_Change = aachange_refgenewithver,
+    SIFT_Score = sift_score,
+    PolyPhen2_HDIV = polyphen2_hdiv_score,
+    PolyPhen2_HVAR = polyphen2_hvar_score,
+    CADD_Raw = cadd_raw,
+    CADD_Phred = cadd_phred
+  )
+
+purrr::pmap(data, function(Gene, Variant_ID, ClinVar_ID, Exonic_Function, 
+                                DNA_Start, DNA_Stop, Ref, Alt, AA_Change, 
+                                SIFT_Score, PolyPhen2_HDIV, PolyPhen2_HVAR, 
+                                CADD_Raw, CADD_Phred) {
+  cat("Gene:", Gene, "\n")
+  cat("Variant ID (rs number):", Variant_ID, "\n")
+  cat("Exonic Function:", Exonic_Function, "\n")
+  cat("DNA Change: Start =", DNA_Start, ", Stop =", DNA_Stop, 
+      ", Ref =", Ref, ", Alt =", Alt, "\n")
+  cat("Amino Acid Change:", AA_Change, "\n")
+  cat("SIFT Score:", SIFT_Score, "\n")
+  cat("PolyPhen2 HDIV Score:", PolyPhen2_HDIV, "\n")
+  cat("PolyPhen2 HVAR Score:", PolyPhen2_HVAR, "\n")
+  cat("CADD Raw Score:", CADD_Raw, "\n")
+  cat("CADD Phred Score:", CADD_Phred, "\n")
+  cat("--------------------------------------------------\n\n")
+})
+
+```
+
+## Calponin 2 (CNN2) Gene Analysis
+
+CNN2 encodes calponin 2, a thin filament-associated protein implicated in the regulation and modulation of smooth muscle contraction. It is capable of binding to actin and calmodulin, playing a crucial role in cytoskeleton organization and cellular processes ([GeneCards](https://www.genecards.org/cgi-bin/carddisp.pl?gene=CNN2)). CNN2 is expressed in both smooth muscle and non-muscle cells, contributing to various cellular functions including migration, adhesion, and proliferation ([Jin et al., 2017](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5325694/)).
+
+## Damaging Variant Analysis
+
+1.  **rs77830704**: This missense variant results in a glycine to serine substitution at position 263 (G263S) in the protein sequence. While classified as a non-clinical variant, computational predictions suggest it may have a deleterious effect on protein function. Its role in colorectal cancer risk has been investigated in Lynch syndrome patients ([Boujemaa et al., 2024](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2024.1327894/full)).
+
+2.  **rs78386506**: This missense variant causes an arginine to glutamine substitution at position 287 (R287Q). Computational analyses predict this mutation to be possibly damaging, deleterious, and disease-causing. However, its clinical significance remains unknown ([Boujemaa et al., 2024](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2024.1327894/full)).
+
+The effects of CNN2 variants have been studied in various contexts:
+
+1.  **Atherosclerosis**: Deletion of calponin 2 in macrophages has been shown to attenuate the development of arterial atherosclerosis lesions in apolipoprotein E knockout mice. Calponin 2-null macrophages exhibited increased migration, enhanced phagocytosis, and produced fewer pro-inflammatory cytokines compared to wild-type cells ([Jin et al., 2017](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5325694/)).
+
+2.  **Acute Kidney Injury**: CNN2 has been found to be induced in human and animal kidneys after acute kidney injury (AKI). Knockdown of CNN2 preserved kidney function, mitigated tubular cell death, and reduced inflammation in AKI models ([Wang et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10721266/)).
+
+## ClinVar Analysis
+
+Based on the ClinVar significance, CNN2 and its variants are implicated in the context of pulmonary atresia (PA), a severe cyanotic congenital heart disease. CNN2 has been identified as one of the novel candidate genes potentially playing a role in the pathogenesis of pulmonary atresia from whole-exome sequencing (WES) ([Liu et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10199322/); [Liu et al., 2020](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7044470/)). A specific CNN2 variant, p.R266Q, was found to have altered physicochemical properties of its side-chain radical in PA patients ([Liu et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10199322/)). The pathogenesis of PA likely involves multiple rare genetic variants. For instance, a study found 56 rare damaging variants in 7 novel candidate genes, including CNN2 ([Shi et al., 2020](https://doi.org/10.1016/j.csbj.2020.01.011)). CNN2 showed high expression in human heart tissue, suggesting its potential importance in cardiac development and function ([Liu et al., 2020](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7044470/)).
+
+## Mechanistic Insights
+
+1.  **Mechanoregulation**: The CNN2 gene promoter is mechanosensitive, responding to changes in cytoskeletal tension ([Rozenblum & Gimona, 2008](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3894341/)). This mechanoregulation could be relevant in the context of cardiac development and PA pathogenesis.
+
+2.  **Transcriptional Control**: The expression of CNN2 is primarily regulated at the transcriptional level in response to mechanical forces ([Rozenblum & Gimona, 2008](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3894341/)). This suggests that alterations in mechanical forces during cardiac development could affect CNN2 expression and potentially contribute to PA.
+
+3.  **Notch Signaling**: An HES-1 (hairy and enhancer of split 1) cis-regulatory element downstream of the Notch signaling pathway has been identified in the CNN2 promoter ([Jiang et al., 2014](https://doi.org/10.1074/jbc.M113.498147)). Notch signaling is crucial for cardiac development, and its dysregulation could link CNN2 to PA. Protein-protein interaction analyses have revealed that some PA candidate genes interact with known PA-associated genes and are highly expressed in the human heart ([Liu et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10199322/)).
+
+CNN2 variants have been associated with pulmonary artery atresia, the gene is part of a complex genetic network involved in this congenital heart defect. Further research is needed to fully elucidate the role of CNN2 and its interactions with other genes in the pathogenesis of pulmonary artery atresia.
+
+## References
+
+-   [Boujemaa et al., 2024](https://www.frontiersin.org/journals/genetics/articles/10.3389/fgene.2024.1327894/full)\
+-   [GeneCards](https://www.genecards.org/cgi-bin/carddisp.pl?gene=CNN2)\
+-   [Jin et al., 2017](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5325694/)\
+-   [Liu et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10199322/)\
+-   [Liu et al., 2020](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7044470/)\
+-   [Wang et al., 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10721266/)\
+-   [Rozenblum & Gimona, 2008](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3894341/)\
+-   [Jiang et al., 2014](https://doi.org/10.1074/jbc.M113.498147)\
+-   [Shi et al., 2020](https://doi.org/10.1016/j.csbj.2020.01.011) \`\`\`
